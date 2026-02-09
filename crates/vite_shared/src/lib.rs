@@ -1,10 +1,13 @@
 //! Shared utilities for vite-plus crates
 
+mod env_config;
+pub mod env_vars;
 mod home;
 mod package_json;
 mod path_env;
 mod tracing;
 
+pub use env_config::{EnvConfig, TestEnvGuard};
 pub use home::get_vite_plus_home;
 pub use package_json::{DevEngines, Engines, PackageJson, RuntimeEngine, RuntimeEngineConfig};
 pub use path_env::{
