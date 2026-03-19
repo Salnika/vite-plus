@@ -1,8 +1,8 @@
-// Unified `vp config` command — merges the old `vp prepare` (hooks setup) and
-// `vp init` (agent integration) into a single entry point.
+// Unified `vp config` command — hooks setup + agent instruction updates.
 //
-// Interactive mode (TTY, no CI): prompts on first run, updates silently after.
-// Non-interactive mode (scripts.prepare, CI, piped): runs everything by default.
+// Hooks: interactive mode prompts on first run; non-interactive installs by default.
+// Agent instructions: silently updates existing files with Vite+ markers.
+// Never creates new agent files. Same behavior for prepare and manual runs.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,16 +10,10 @@ import { join } from 'node:path';
 import mri from 'mri';
 
 import { vitePlusHeader } from '../../binding/index.js';
+import { updateExistingAgentInstructions } from '../utils/agent.js';
 import { renderCliDoc } from '../utils/help.js';
 import { defaultInteractive, promptGitHooks } from '../utils/prompts.js';
-import { linkSkillsForSpecificAgents } from '../utils/skills.js';
 import { log } from '../utils/terminal.js';
-import {
-  resolveAgentSetup,
-  hasExistingAgentInstructions,
-  injectAgentBlock,
-  setupMcpConfig,
-} from './agent.js';
 import { install } from './hooks.js';
 
 async function main() {
@@ -81,16 +75,9 @@ async function main() {
     }
   }
 
-  // --- Step 2: Agent setup (skipped with --hooks-only or during prepare lifecycle) ---
-  if (!hooksOnly && process.env.npm_lifecycle_event !== 'prepare') {
-    const isFirstAgentRun = !hasExistingAgentInstructions(root);
-    const agentSetup = await resolveAgentSetup(root, interactive && isFirstAgentRun);
-
-    injectAgentBlock(root, agentSetup.instructionFilePath);
-    setupMcpConfig(root, agentSetup.agents);
-    if (agentSetup.agents.length > 0) {
-      linkSkillsForSpecificAgents(root, agentSetup.agents);
-    }
+  // --- Step 2: Update agent instructions if Vite+ header exists and is outdated ---
+  if (!hooksOnly) {
+    updateExistingAgentInstructions(root);
   }
 }
 
