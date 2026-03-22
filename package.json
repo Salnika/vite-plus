@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -F @voidzero-dev/* -F vite-plus build",
+    "install:dev": "node scripts/setup-local-dev.mjs",
+    "bootstrap:dev": "pnpm install:dev && pnpm build:cli",
     "build:cli": "tool build-local-cli",
-    "bootstrap-cli": "tool build-local-cli --release-rust && pnpm install-global-cli",
+    "bootstrap-cli": "pnpm install:dev && tool build-local-cli --release-rust && pnpm install-global-cli",
     "bootstrap-cli:ci": "pnpm install-global-cli",
     "install-global-cli": "tool install-global-cli",
     "tsgo": "tsgo -b tsconfig.json",
