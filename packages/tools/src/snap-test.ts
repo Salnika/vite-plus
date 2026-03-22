@@ -127,7 +127,8 @@ export async function snapTest() {
     }
   }
 
-  const vitePlusHome = path.join(homedir(), '.vite-plus');
+  const vitePlusHome = path.join(tempTmpDir, 'vite-plus-home');
+  fs.mkdirSync(vitePlusHome, { recursive: true });
 
   // Remove .previous-version so command-upgrade-rollback snap test is stable
   const previousVersionPath = path.join(vitePlusHome, '.previous-version');
@@ -209,7 +210,7 @@ export async function snapTest() {
   for (const caseName of selectedCases) {
     const stepsPath = path.join(casesDir, caseName, 'steps.json');
     const steps: Steps = JSON.parse(readFileSync(stepsPath, 'utf-8'));
-    const task = () => runTestCase(caseName, tempTmpDir, casesDir, values['bin-dir']);
+    const task = () => runTestCase(caseName, tempTmpDir, casesDir, vitePlusHome, values['bin-dir']);
     if (steps.serial) {
       serialTasks.push(task);
     } else {
@@ -322,7 +323,13 @@ function shouldSkipPlatform(ignoredPlatforms: (string | PlatformFilter)[]): bool
   return false;
 }
 
-async function runTestCase(name: string, tempTmpDir: string, casesDir: string, binDir?: string) {
+async function runTestCase(
+  name: string,
+  tempTmpDir: string,
+  casesDir: string,
+  vitePlusHome: string,
+  binDir?: string,
+) {
   const steps: Steps = JSON.parse(
     await fsPromises.readFile(`${casesDir}/${name}/steps.json`, 'utf-8'),
   );
@@ -352,7 +359,7 @@ async function runTestCase(name: string, tempTmpDir: string, casesDir: string, b
     NO_COLOR: 'true',
     // set CI=true make sure snap-tests are stable on GitHub Actions
     CI: 'true',
-    VP_HOME: path.join(homedir(), '.vite-plus'),
+    VP_HOME: vitePlusHome,
     // Set git identity so `git commit` works on CI runners without global git config
     GIT_AUTHOR_NAME: 'Test',
     GIT_COMMITTER_NAME: 'Test',
