@@ -17,10 +17,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cargo install cargo-binstall
 ```
 
-Initial setup to install dependencies for Vite+:
+Initial setup to prepare the repo for local development:
 
 ```
-just init
+pnpm install:dev
 ```
 
 ### Windows
@@ -37,10 +37,10 @@ Install Rust & Cargo from [rustup.rs](https://rustup.rs/), then install `cargo-b
 cargo install cargo-binstall
 ```
 
-Initial setup to install dependencies for Vite+:
+Initial setup to prepare the repo for local development:
 
 ```powershell
-just init
+pnpm install:dev
 ```
 
 **Note:** Run commands in PowerShell or Windows Terminal. Some commands may require elevated permissions.
@@ -56,13 +56,19 @@ just build
 ## Local CLI workflow
 
 ```
-pnpm install
-pnpm build:cli
+pnpm bootstrap:dev
 pnpm test
 ```
 
-This installs dependencies, builds the repo-local CLI artifacts, and runs tests without reading `~/.vite-plus`.
-If you have not prepared the local `rolldown/` and `vite/` checkouts yet, run `just init` or `node packages/tools/src/index.ts sync-remote` first.
+This prepares the local `rolldown/` and `vite/` checkouts, installs dependencies, builds the repo-local CLI artifacts, and runs tests without reading `~/.vite-plus`.
+
+If you only want to prepare the repo after cloning it, run:
+
+```
+pnpm install:dev
+```
+
+If you prefer the existing Just-based setup, `just init` now delegates to the same repo-local install flow.
 
 ## Install the Vite+ Global CLI from source code
 

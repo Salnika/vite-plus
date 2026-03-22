@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,8 +13,11 @@ const localVpPath = path.join(repoRoot, 'target', 'debug', isWindows ? 'vp.exe' 
 const localVpBinDir = path.dirname(localVpPath);
 const viteRepoDir = path.join(repoRoot, 'vite');
 const legacyViteRepoDir = path.join(repoRoot, 'rolldown-vite');
+const rolldownSrcDir = path.join(repoRoot, 'rolldown', 'packages', 'rolldown', 'src');
 const toolBinPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'bin.js');
 const buildHint = 'pnpm build:cli';
+const bootstrapHint = 'pnpm bootstrap:dev';
+const installHint = 'pnpm install:dev';
 const pnpmExecPath = process.env.npm_execpath;
 const pnpmBin = isWindows ? 'pnpm.cmd' : 'pnpm';
 const cargoBin = isWindows ? 'cargo.exe' : 'cargo';
@@ -30,7 +33,7 @@ type CommandOptions = {
 
 function failMissing(pathname: string, description: string): never {
   console.error(`Missing ${description}: ${pathname}`);
-  console.error(`Run "${buildHint}" first.`);
+  console.error(`Run "${bootstrapHint}" from a fresh clone, or "${buildHint}" after setup.`);
   process.exit(1);
 }
 
@@ -126,6 +129,51 @@ function rolldownBindingCandidates() {
   }
 }
 
+function hasRolldownPackagedBinding() {
+  const candidates = rolldownBindingCandidates();
+  if (candidates.length === 0) {
+    return true;
+  }
+
+  for (const candidate of candidates) {
+    try {
+      requireFromRolldown.resolve(candidate);
+      return true;
+    } catch {
+      continue;
+    }
+  }
+
+  return false;
+}
+
+function materializeRolldownPackagedBindings() {
+  for (const candidate of rolldownBindingCandidates()) {
+    let packageJsonPath: string;
+    try {
+      packageJsonPath = requireFromRolldown.resolve(candidate);
+    } catch {
+      continue;
+    }
+
+    const packageDir = path.dirname(packageJsonPath);
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+      files?: string[];
+      main?: string;
+    };
+    const bindingFile = packageJson.main ?? packageJson.files?.find((file) => file.endsWith('.node'));
+    if (!bindingFile) {
+      continue;
+    }
+
+    const sourcePath = path.join(packageDir, bindingFile);
+    const targetPath = path.join(rolldownSrcDir, path.basename(bindingFile));
+    if (!existsSync(targetPath)) {
+      copyFileSync(sourcePath, targetPath);
+    }
+  }
+}
+
 function ensureBuildWorkspaceReady() {
   if (!existsSync(viteRepoDir)) {
     console.error(`Missing local vite checkout: ${viteRepoDir}`);
@@ -134,34 +182,15 @@ function ensureBuildWorkspaceReady() {
         `Found legacy checkout at ${legacyViteRepoDir}. This repo now expects the upstream Vite checkout at ./vite.`,
       );
       console.error(
-        'Run "node packages/tools/src/index.ts sync-remote" to recreate the canonical layout.',
+        `Run "${installHint}" to recreate the canonical layout.`,
       );
     } else {
       console.error(
-        'Run "node packages/tools/src/index.ts sync-remote" to fetch the local upstream checkouts required for development.',
+        `Run "${installHint}" to fetch the local upstream checkouts, or "${bootstrapHint}" to prepare and build the local CLI.`,
       );
     }
     process.exit(1);
   }
-
-  const candidates = rolldownBindingCandidates();
-  if (candidates.length === 0) {
-    return;
-  }
-
-  for (const candidate of candidates) {
-    try {
-      requireFromRolldown.resolve(candidate);
-      return;
-    } catch {
-      continue;
-    }
-  }
-
-  console.error('Missing local rolldown native binding dependency.');
-  console.error('Run "pnpm install" from the repo root to install workspace optional dependencies.');
-  console.error('If your environment cannot download the prebuilt binding, install "cmake" to build rolldown from source.');
-  process.exit(1);
 }
 
 function runCommand(step: string, command: string, args: string[], options: CommandOptions = {}) {
@@ -237,8 +266,20 @@ export function runBuildLocalCli(args: string[]) {
   ensureBuildWorkspaceReady();
 
   runPnpmCommand('Build @rolldown/pluginutils', ['--filter', '@rolldown/pluginutils', 'build']);
+  const hasPackagedBinding = hasRolldownPackagedBinding();
+  if (!hasPackagedBinding) {
+    runPnpmCommand(
+      'Build rolldown native binding',
+      ['--filter', 'rolldown', releaseRust ? 'build-binding:release' : 'build-binding'],
+      {
+        hint: 'If this fails, install "cmake" so rolldown can build its native binding from source.',
+      },
+    );
+  } else {
+    materializeRolldownPackagedBindings();
+  }
   runPnpmCommand('Build rolldown JS glue', ['--filter', 'rolldown', 'build-node'], {
-    hint: 'If this fails with a missing rolldown native binding, rerun "pnpm install". If the error mentions "cmake", install cmake to build rolldown from source.',
+    hint: 'If this fails with a missing rolldown native binding, rerun "pnpm install:dev". If the error mentions "cmake", install cmake to build rolldown from source.',
   });
   runPnpmCommand('Build vite rolled-up types', ['-C', 'vite', '--filter', 'vite', 'build-types-roll'], {
     hint: 'If this fails because vite dependencies are missing, rerun "pnpm install" from the repo root.',
