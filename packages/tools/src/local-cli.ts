@@ -13,7 +13,10 @@ const localVpPath = path.join(repoRoot, 'target', 'debug', isWindows ? 'vp.exe' 
 const localVpBinDir = path.dirname(localVpPath);
 const viteRepoDir = path.join(repoRoot, 'vite');
 const legacyViteRepoDir = path.join(repoRoot, 'rolldown-vite');
-const rolldownSrcDir = path.join(repoRoot, 'rolldown', 'packages', 'rolldown', 'src');
+const rolldownRepoDir = path.join(repoRoot, 'rolldown');
+const rolldownPackageDir = path.join(rolldownRepoDir, 'packages', 'rolldown');
+const rolldownPackageJsonPath = path.join(rolldownPackageDir, 'package.json');
+const rolldownSrcDir = path.join(rolldownPackageDir, 'src');
 const toolBinPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'bin.js');
 const buildHint = 'pnpm build:cli';
 const bootstrapHint = 'pnpm bootstrap:dev';
@@ -21,9 +24,7 @@ const installHint = 'pnpm install:dev';
 const pnpmExecPath = process.env.npm_execpath;
 const pnpmBin = isWindows ? 'pnpm.cmd' : 'pnpm';
 const cargoBin = isWindows ? 'cargo.exe' : 'cargo';
-const requireFromRolldown = createRequire(
-  path.join(repoRoot, 'rolldown', 'packages', 'rolldown', 'package.json'),
-);
+const requireFromRolldown = createRequire(rolldownPackageJsonPath);
 
 type CommandOptions = {
   cwd?: string;
@@ -189,6 +190,22 @@ function ensureBuildWorkspaceReady() {
         `Run "${installHint}" to fetch the local upstream checkouts, or "${bootstrapHint}" to prepare and build the local CLI.`,
       );
     }
+    process.exit(1);
+  }
+
+  if (!existsSync(rolldownRepoDir)) {
+    console.error(`Missing local rolldown checkout: ${rolldownRepoDir}`);
+    console.error(
+      `Run "${installHint}" to fetch the local upstream checkouts, or "${bootstrapHint}" to prepare and build the local CLI.`,
+    );
+    process.exit(1);
+  }
+
+  if (!existsSync(rolldownPackageJsonPath) || !existsSync(rolldownSrcDir)) {
+    console.error(`Incomplete local rolldown checkout: ${rolldownPackageDir}`);
+    console.error(
+      `Run "${installHint}" to fetch the local upstream checkouts, or "${bootstrapHint}" to prepare and build the local CLI.`,
+    );
     process.exit(1);
   }
 }

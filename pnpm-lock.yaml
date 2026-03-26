@@ -593,9 +593,6 @@ importers:
       is-unicode-supported:
         specifier: ^1.3.0
         version: 1.3.0
-      rolldown:
-        specifier: workspace:rolldown@*
-        version: link:../../rolldown/packages/rolldown
       tsdown:
         specifier: 'catalog:'
         version: 0.21.7(@arethetypeswrong/core@0.18.2)(@tsdown/css@0.21.7)(@tsdown/exe@0.21.7)(@typescript/native-preview@7.0.0-dev.20260122.2)(@vitejs/devtools@0.1.11(@pnpm/logger@1001.0.1)(typescript@6.0.2)(vite@packages+core))(publint@0.3.18)(typescript@6.0.2)(unplugin-unused@0.5.6)
