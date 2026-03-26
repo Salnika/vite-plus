@@ -10,6 +10,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const gitBin = isWindows ? 'git.exe' : 'git';
 const pnpmBin = isWindows ? 'pnpm.cmd' : 'pnpm';
 const pnpmLockfilePath = path.join(repoRoot, 'pnpm-lock.yaml');
+const rolldownPackageJsonRelativePath = 'packages/rolldown/package.json';
 const upstreamVersions = JSON.parse(
   readFileSync(path.join(repoRoot, 'packages', 'tools', '.upstream-versions.json'), 'utf-8'),
 );
@@ -57,6 +58,14 @@ function capture(command, args, cwd) {
     stdio: 'pipe',
     encoding: 'utf-8',
   }).stdout.trim();
+}
+
+function stringifyJson(value) {
+  return JSON.stringify(value, null, 2) + '\n';
+}
+
+function rolldownPackageJsonPath(rootDir = repoRoot) {
+  return path.join(rootDir, rolldownPackageJsonRelativePath);
 }
 
 function isGitRepo(dir) {
@@ -140,14 +149,12 @@ function rolldownBindingCandidates() {
   }
 }
 
-function ensureRolldownHostBindings() {
+function withRolldownHostBindings(pkg) {
   const candidates = rolldownBindingCandidates();
   if (candidates.length === 0) {
-    return;
+    return { changed: false, pkg };
   }
 
-  const packageJsonPath = path.join(repoRoot, 'rolldown', 'packages', 'rolldown', 'package.json');
-  const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
   const optionalDependencies = {
     ...(pkg.optionalDependencies ?? {}),
   };
@@ -161,12 +168,47 @@ function ensureRolldownHostBindings() {
   }
 
   if (!changed) {
+    return { changed: false, pkg };
+  }
+
+  return {
+    changed: true,
+    pkg: {
+      ...pkg,
+      optionalDependencies,
+    },
+  };
+}
+
+function ensureRolldownHostBindings() {
+  const packageJsonPath = rolldownPackageJsonPath();
+  const { changed, pkg } = withRolldownHostBindings(
+    JSON.parse(readFileSync(packageJsonPath, 'utf-8')),
+  );
+  if (!changed) {
     return;
   }
 
-  pkg.optionalDependencies = optionalDependencies;
-  writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+  writeFileSync(packageJsonPath, stringifyJson(pkg), 'utf-8');
   log(`Added host rolldown bindings to ${packageJsonPath}`);
+}
+
+function hasOnlyManagedRolldownBindingsChange(dir) {
+  const statusEntries = capture(gitBin, ['status', '--porcelain'], dir)
+    .split('\n')
+    .filter(Boolean);
+  if (statusEntries.length !== 1 || statusEntries[0].slice(3) !== rolldownPackageJsonRelativePath) {
+    return false;
+  }
+
+  const { changed, pkg } = withRolldownHostBindings(
+    JSON.parse(capture(gitBin, ['show', `HEAD:${rolldownPackageJsonRelativePath}`], dir)),
+  );
+  if (!changed) {
+    return false;
+  }
+
+  return readFileSync(rolldownPackageJsonPath(dir), 'utf-8') === stringifyJson(pkg);
 }
 
 function syncCleanCheckout(name, config) {
@@ -188,9 +230,14 @@ function syncCleanCheckout(name, config) {
 
   ensureExpectedRemote(name, dir, config.repo);
 
-  if (isDirty(dir)) {
+  const hasManagedRolldownBindingsChange =
+    name === 'rolldown' && isDirty(dir) && hasOnlyManagedRolldownBindingsChange(dir);
+  if (isDirty(dir) && !hasManagedRolldownBindingsChange) {
     log(`Keeping existing dirty ${name} checkout at ${dir}`);
     return;
+  }
+  if (hasManagedRolldownBindingsChange) {
+    log(`Ignoring managed rolldown host binding diff at ${dir}`);
   }
 
   log(`Updating clean ${name} checkout...`);
