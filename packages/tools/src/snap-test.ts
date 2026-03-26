@@ -210,7 +210,8 @@ export async function snapTest() {
   for (const caseName of selectedCases) {
     const stepsPath = path.join(casesDir, caseName, 'steps.json');
     const steps: Steps = JSON.parse(readFileSync(stepsPath, 'utf-8'));
-    const task = () => runTestCase(caseName, tempTmpDir, casesDir, vitePlusHome, values['bin-dir']);
+    const task = () =>
+      runTestCase(caseName, tempTmpDir, casesDir, vitePlusHome, values['bin-dir']);
     if (steps.serial) {
       serialTasks.push(task);
     } else {
