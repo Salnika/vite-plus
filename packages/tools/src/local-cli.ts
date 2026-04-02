@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +9,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const cliDistDir = path.join(repoRoot, 'packages', 'cli', 'dist');
 const cliBinPath = path.join(cliDistDir, 'bin.js');
 const testCliPath = path.join(repoRoot, 'packages', 'test', 'dist', 'cli.js');
-const localVpPath = path.join(repoRoot, 'target', 'debug', isWindows ? 'vp.exe' : 'vp');
-const localVpBinDir = path.dirname(localVpPath);
+const localVpBinaryName = isWindows ? 'vp.exe' : 'vp';
+const defaultLocalVpPath = path.join(repoRoot, 'target', 'debug', localVpBinaryName);
 const viteRepoDir = path.join(repoRoot, 'vite');
 const legacyViteRepoDir = path.join(repoRoot, 'rolldown-vite');
 const rolldownRepoDir = path.join(repoRoot, 'rolldown');
@@ -32,22 +32,71 @@ type CommandOptions = {
   hint?: string;
 };
 
+type LocalCliArtifacts = {
+  vpPath: string;
+  vpBinDir: string;
+};
+
 function failMissing(pathname: string, description: string): never {
   console.error(`Missing ${description}: ${pathname}`);
   console.error(`Run "${bootstrapHint}" from a fresh clone, or "${buildHint}" after setup.`);
   process.exit(1);
 }
 
-function ensureLocalCliReady(options?: { needsTestCli?: boolean }) {
+function getTargetDirs(): string[] {
+  return [
+    ...new Set(
+      [process.env.CARGO_TARGET_DIR, path.join(repoRoot, 'target')].filter(
+        (targetDir): targetDir is string => Boolean(targetDir),
+      ),
+    ),
+  ];
+}
+
+function findLocalVpBinary(): string | null {
+  const profiles = ['debug', 'release'];
+
+  for (const targetDir of getTargetDirs()) {
+    for (const profile of profiles) {
+      const directPath = path.join(targetDir, profile, localVpBinaryName);
+      if (existsSync(directPath)) {
+        return directPath;
+      }
+    }
+
+    try {
+      for (const entry of readdirSync(targetDir).toSorted()) {
+        for (const profile of profiles) {
+          const nestedPath = path.join(targetDir, entry, profile, localVpBinaryName);
+          if (existsSync(nestedPath)) {
+            return nestedPath;
+          }
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function ensureLocalCliReady(options?: { needsTestCli?: boolean }): LocalCliArtifacts {
   if (!existsSync(cliBinPath)) {
     failMissing(cliBinPath, 'local CLI bundle');
   }
-  if (!existsSync(localVpPath)) {
-    failMissing(localVpPath, 'local debug vp binary');
+  const vpPath = findLocalVpBinary();
+  if (!vpPath) {
+    failMissing(defaultLocalVpPath, 'local vp binary');
   }
   if (options?.needsTestCli && !existsSync(testCliPath)) {
     failMissing(testCliPath, 'local test CLI bundle');
   }
+
+  return {
+    vpPath,
+    vpBinDir: path.dirname(vpPath),
+  };
 }
 
 function localCliEnv(): NodeJS.ProcessEnv {
@@ -262,9 +311,9 @@ function exitWith(result: ReturnType<typeof spawnSync>): never {
 }
 
 export function runLocalCli(args: string[]) {
-  ensureLocalCliReady({ needsTestCli: args[0] === 'test' });
+  const { vpPath } = ensureLocalCliReady({ needsTestCli: args[0] === 'test' });
 
-  const result = spawnSync(localVpPath, args, {
+  const result = spawnSync(vpPath, args, {
     cwd: process.cwd(),
     env: localCliEnv(),
     stdio: 'inherit',
@@ -273,7 +322,7 @@ export function runLocalCli(args: string[]) {
 }
 
 export function runLocalGlobalSnapTest(args: string[]) {
-  ensureLocalCliReady();
+  const { vpBinDir } = ensureLocalCliReady();
 
   const result = spawnSync(
     process.execPath,
@@ -283,7 +332,7 @@ export function runLocalGlobalSnapTest(args: string[]) {
       '--dir',
       'snap-tests-global',
       '--local-vp-bin-dir',
-      localVpBinDir,
+      vpBinDir,
       ...args,
     ],
     {
