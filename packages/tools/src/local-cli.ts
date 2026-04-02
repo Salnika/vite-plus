@@ -277,7 +277,15 @@ export function runLocalGlobalSnapTest(args: string[]) {
 
   const result = spawnSync(
     process.execPath,
-    [toolBinPath, 'snap-test', '--dir', 'snap-tests-global', '--bin-dir', localVpBinDir, ...args],
+    [
+      toolBinPath,
+      'snap-test',
+      '--dir',
+      'snap-tests-global',
+      '--local-vp-bin-dir',
+      localVpBinDir,
+      ...args,
+    ],
     {
       cwd: process.cwd(),
       env: localCliEnv(),
