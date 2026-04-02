@@ -26,15 +26,15 @@ switch (subcommand) {
     installGlobalCli();
     break;
   case 'build-local-cli':
-    const { runBuildLocalCli } = await import('./local-cli.ts');
+    const { runBuildLocalCli } = await import('./local-cli.js');
     runBuildLocalCli(process.argv.slice(3));
     break;
   case 'local-cli':
-    const { runLocalCli } = await import('./local-cli.ts');
+    const { runLocalCli } = await import('./local-cli.js');
     runLocalCli(process.argv.slice(3));
     break;
   case 'snap-test-global-local':
-    const { runLocalGlobalSnapTest } = await import('./local-cli.ts');
+    const { runLocalGlobalSnapTest } = await import('./local-cli.js');
     runLocalGlobalSnapTest(process.argv.slice(3));
     break;
   case 'brand-vite':
